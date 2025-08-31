@@ -74,18 +74,30 @@ static struct pt_cap_desc {
 	PT_CAP(psb_periods,		1, CPUID_EBX, 0xffff0000),
 };
 
-u32 intel_pt_validate_cap(u32 *caps, enum pt_capabilities capability)
+u32 intel_pt_validate_cap(const u32 *caps, enum pt_capabilities capability)
 {
-	struct pt_cap_desc *cd = &pt_caps[capability];
-	u32 c = caps[cd->leaf * PT_CPUID_REGS_NUM + cd->reg];
-	unsigned int shift = __ffs(cd->mask);
+	if (!caps || capability >= ARRAY_SIZE(pt_caps))
+		return 0; /* fail safely */
 
-	return (c & cd->mask) >> shift;
+	const struct pt_cap_desc *cd = &pt_caps[capability];
+	u32 c;
+
+	/* bounds-safe access */
+	if (cd->leaf >= PT_CPUID_LEAVES || cd->reg >= PT_CPUID_REGS_NUM)
+		return 0;
+
+	c = caps[cd->leaf * PT_CPUID_REGS_NUM + cd->reg];
+
+	return (c & cd->mask) >> __ffs(cd->mask);
 }
 EXPORT_SYMBOL_GPL(intel_pt_validate_cap);
 
 u32 intel_pt_validate_hw_cap(enum pt_capabilities cap)
 {
+	/* explicit null check for global caps */
+	if (!pt_pmu.caps)
+		return 0;
+
 	return intel_pt_validate_cap(pt_pmu.caps, cap);
 }
 EXPORT_SYMBOL_GPL(intel_pt_validate_hw_cap);
@@ -94,11 +106,11 @@ static ssize_t pt_cap_show(struct device *cdev,
 			   struct device_attribute *attr,
 			   char *buf)
 {
-	struct dev_ext_attribute *ea =
-		container_of(attr, struct dev_ext_attribute, attr);
+	const struct dev_ext_attribute *ea =
+		container_of(attr, const struct dev_ext_attribute, attr);
 	enum pt_capabilities cap = (long)ea->var;
 
-	return snprintf(buf, PAGE_SIZE, "%x\n", intel_pt_validate_hw_cap(cap));
+	return scnprintf(buf, PAGE_SIZE, "%x\n", intel_pt_validate_hw_cap(cap));
 }
 
 static struct attribute_group pt_cap_group __ro_after_init = {
