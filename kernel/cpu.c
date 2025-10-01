@@ -578,13 +578,25 @@ void cpu_hotplug_disable_offlining(void)
  * hotplug path before performing hotplug operations. So acquiring that lock
  * guarantees mutual exclusion from any currently running hotplug operations.
  */
+
+/*
+ * Patch ID: 0000000002
+ * Added boundary check in cpu_hotplug_disable to prevent integer overflow on
+ * cpu_hotplug_disabled counter, which could cause security issues or logic errors.
+ */
 void cpu_hotplug_disable(void)
 {
 	cpu_maps_update_begin();
-	cpu_hotplug_disabled++;
+	if (cpu_hotplug_disabled == INT_MAX) {
+		pr_warn("cpu_hotplug_disabled counter reached max limit\n");
+		/* Prevent further increment to avoid overflow */
+	} else {
+		cpu_hotplug_disabled++;
+	}
 	cpu_maps_update_done();
 }
 EXPORT_SYMBOL_GPL(cpu_hotplug_disable);
+
 
 static void __cpu_hotplug_enable(void)
 {
