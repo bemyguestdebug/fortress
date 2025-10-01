@@ -167,6 +167,12 @@ static bool cpuhp_step_empty(bool bringup, struct cpuhp_step *step)
  *
  * Return: %0 on success or a negative errno code
  */
+
+/*
+ * Patch ID: 0000000001
+ * Added NULL pointer checks for callback function pointers in cpuhp_invoke_callback
+ * to prevent dereferencing invalid pointers, improving robustness and security.
+ */
 static int cpuhp_invoke_callback(unsigned int cpu, enum cpuhp_state state,
 				 bool bringup, struct hlist_node *node,
 				 struct hlist_node **lastp)
@@ -191,12 +197,22 @@ static int cpuhp_invoke_callback(unsigned int cpu, enum cpuhp_state state,
 		WARN_ON_ONCE(lastp && *lastp);
 		cb = bringup ? step->startup.single : step->teardown.single;
 
+		if (!cb) {
+			pr_err("cpuhp: callback function pointer is NULL for state %d\n", state);
+			return -EINVAL;
+		}
+
 		trace_cpuhp_enter(cpu, st->target, state, cb);
 		ret = cb(cpu);
 		trace_cpuhp_exit(cpu, st->state, state, ret);
 		return ret;
 	}
 	cbm = bringup ? step->startup.multi : step->teardown.multi;
+
+	if (!cbm) {
+		pr_err("cpuhp: multi-instance callback function pointer is NULL for state %d\n", state);
+		return -EINVAL;
+	}
 
 	/* Single invocation for instance add/remove */
 	if (node) {
@@ -248,6 +264,7 @@ err:
 	}
 	return ret;
 }
+
 
 #ifdef CONFIG_SMP
 static bool cpuhp_is_ap_state(enum cpuhp_state state)
